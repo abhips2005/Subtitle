@@ -21,7 +21,7 @@ TRANSLATION_SERVICES = {
 
 # Supported target languages for translation
 TARGET_LANGUAGES = {
-    "Spanish": "es", "French": "fr", "German": "de", "Italian": "it",
+    "English": "en", "Spanish": "es", "French": "fr", "German": "de", "Italian": "it",
     "Portuguese": "pt", "Russian": "ru", "Japanese": "ja", "Chinese (Simplified)": "zh",
     "Korean": "ko", "Hindi": "hi", "Arabic": "ar", "Dutch": "nl",
     "Turkish": "tr", "Polish": "pl", "Swedish": "sv", "Norwegian": "no",
@@ -39,7 +39,7 @@ class SubtitleTranslator:
         self.service = service
     
     def translate_text_google_free(self, text: str, target_lang: str, source_lang: str = "auto") -> str:
-        """Translate text using Google Translate via deep-translator (more reliable)"""
+        """Enhanced translation with context awareness, especially for English"""
         try:
             from deep_translator import GoogleTranslator
             
@@ -47,6 +47,20 @@ class SubtitleTranslator:
             text = text.strip()
             if not text:
                 return text
+            
+            # Enhanced prompting for English translations
+            if target_lang == "en":
+                # Add context cues for more natural English
+                if any(word in text.lower() for word in ["hello", "hi", "hey", "good morning", "good evening"]):
+                    text = f"Translate this greeting naturally to conversational English: {text}"
+                elif any(word in text.lower() for word in ["thank", "thanks", "please", "sorry", "excuse"]):
+                    text = f"Translate this polite expression to natural English: {text}"
+                elif "?" in text:
+                    text = f"Translate this question to natural English: {text}"
+                elif "!" in text:
+                    text = f"Translate this exclamation to natural English: {text}"
+                else:
+                    text = f"Translate to natural conversational English: {text}"
             
             # Use deep-translator which is more stable
             translator = GoogleTranslator(source=source_lang, target=target_lang)
@@ -65,18 +79,26 @@ class SubtitleTranslator:
                     else:
                         if current_chunk:
                             translated_chunk = translator.translate(current_chunk.strip())
+                            # Clean up English translation artifacts
+                            if target_lang == "en":
+                                translated_chunk = self.clean_english_translation(translated_chunk)
                             translated_parts.append(translated_chunk)
                         current_chunk = sentence + ". "
                 
                 # Translate remaining chunk
                 if current_chunk:
                     translated_chunk = translator.translate(current_chunk.strip())
+                    if target_lang == "en":
+                        translated_chunk = self.clean_english_translation(translated_chunk)
                     translated_parts.append(translated_chunk)
                 
                 return " ".join(translated_parts)
             else:
                 # Translate normally for shorter text
-                return translator.translate(text)
+                result = translator.translate(text)
+                if target_lang == "en":
+                    result = self.clean_english_translation(result)
+                return result
             
         except Exception as e:
             st.warning(f"Google Translation failed: {str(e)}")
@@ -183,6 +205,77 @@ class SubtitleTranslator:
             st.warning(f"Translation service failed: {str(e)}")
             # Simple fallback: return with language indicator
             return f"[{target_lang.upper()}] {text}"
+    
+    def clean_english_translation(self, text: str) -> str:
+        """Clean up English translation artifacts and improve naturalness"""
+        if not text:
+            return text
+        
+        # Remove translation prompt artifacts
+        cleaned = text
+        
+        # Remove common translation prompts that might leak through
+        prompts_to_remove = [
+            "Translate this greeting naturally to conversational English:",
+            "Translate this polite expression to natural English:",
+            "Translate this question to natural English:",
+            "Translate this exclamation to natural English:",
+            "Translate to natural conversational English:",
+            "Translation:",
+            "English:",
+            "The translation is:",
+            "In English:",
+        ]
+        
+        for prompt in prompts_to_remove:
+            cleaned = cleaned.replace(prompt, "").strip()
+        
+        # Fix common English translation issues
+        fixes = {
+            # Grammar improvements
+            " a hour": " an hour",
+            " a university": " a university", 
+            " an university": " a university",
+            " a apple": " an apple",
+            " a orange": " an orange",
+            " a elephant": " an elephant",
+            
+            # Natural conversation patterns
+            "very very ": "really ",
+            "more better": "better",
+            "most best": "best",
+            "can not": "cannot",
+            
+            # Proper capitalization
+            " i ": " I ",
+            " i'm": " I'm",
+            " i'll": " I'll", 
+            " i've": " I've",
+            " i'd": " I'd",
+            " i.": " I.",
+            " i,": " I,",
+            " i!": " I!",
+            " i?": " I?",
+        }
+        
+        # Apply fixes
+        for old, new in fixes.items():
+            cleaned = cleaned.replace(old, new)
+        
+        # Ensure proper sentence capitalization
+        if cleaned and len(cleaned) > 0:
+            cleaned = cleaned[0].upper() + cleaned[1:] if len(cleaned) > 1 else cleaned.upper()
+        
+        # Ensure proper punctuation for natural speech
+        if cleaned and not cleaned.endswith(('.', '!', '?', ':', ';', ',')):
+            # Add period for statements, but be smart about it
+            if any(word in cleaned.lower() for word in ['hello', 'hi', 'hey', 'thanks', 'yes', 'no', 'okay', 'ok']):
+                # Short responses don't always need periods
+                pass
+            else:
+                cleaned += "."
+        
+        return cleaned.strip()
 
 def create_simple_translation_map() -> Dict[str, Dict[str, str]]:
     """Create a simple translation map for common subtitle phrases"""
@@ -265,7 +358,7 @@ def translate_subtitles_preserve_structure(srt_content: str, target_language: st
                                          translation_service: str = "google_free", 
                                          api_key: str = None) -> str:
     """
-    Translate SRT subtitles while preserving timestamps, speaker diarization, and structure
+    Translate SRT subtitles with context awareness while preserving timestamps, speaker diarization, and structure
     """
     if not srt_content or not target_language:
         return srt_content
@@ -275,6 +368,12 @@ def translate_subtitles_preserve_structure(srt_content: str, target_language: st
     
     # Parse original subtitles to preserve structure
     subtitles = parse_srt_subtitles(srt_content)
+    
+    # Enhanced context-aware translation for English
+    if target_lang_code == "en":
+        return translate_with_context_awareness(subtitles, translator, api_key)
+    
+    # Standard translation for other languages
     translated_srt = ""
     
     for subtitle in subtitles:
@@ -308,6 +407,195 @@ def translate_subtitles_preserve_structure(srt_content: str, target_language: st
         translated_srt += f"{final_text}\n\n"
     
     return translated_srt
+
+def translate_with_context_awareness(subtitles: List[Dict], translator: SubtitleTranslator, api_key: str = None) -> str:
+    """
+    Enhanced context-aware translation specifically optimized for English
+    """
+    translated_srt = ""
+    conversation_context = []
+    speaker_contexts = {}
+    
+    # Group subtitles by conversation segments
+    conversation_segments = group_by_conversation_segments(subtitles)
+    
+    for segment in conversation_segments:
+        # Translate each conversation segment with full context
+        segment_texts = []
+        speaker_info = []
+        
+        for subtitle in segment:
+            original_text = subtitle['text']
+            speaker_label = ""
+            text_content = original_text
+            
+            # Extract speaker information
+            if original_text.startswith('[') and ']' in original_text:
+                end_bracket = original_text.find(']')
+                speaker_label = original_text[:end_bracket + 1]
+                text_content = original_text[end_bracket + 1:].strip()
+                
+                # Build speaker context
+                speaker_id = speaker_label.strip('[]')
+                if speaker_id not in speaker_contexts:
+                    speaker_contexts[speaker_id] = []
+                speaker_contexts[speaker_id].append(text_content)
+            
+            segment_texts.append(text_content)
+            speaker_info.append((speaker_label, subtitle['id'], subtitle['start'], subtitle['end']))
+        
+        # Create context-aware translation prompt
+        if len(segment_texts) > 1:
+            # Multi-line conversation - translate with context
+            context_text = " | ".join(segment_texts)
+            context_prompt = f"Translate this conversation naturally to English, maintaining conversational flow and context: {context_text}"
+            
+            try:
+                translated_conversation = translator.translate_subtitle_text(context_prompt, "en", api_key)
+                # Extract individual translations from context
+                context_translations = extract_individual_translations(translated_conversation, len(segment_texts))
+            except Exception as e:
+                # Fallback to individual translation
+                context_translations = [translator.translate_subtitle_text(text, "en", api_key) for text in segment_texts]
+        else:
+            # Single line - translate with accumulated context
+            context_translations = [enhance_single_translation(segment_texts[0], conversation_context, translator, api_key)]
+        
+        # Reconstruct SRT with enhanced translations
+        for i, (speaker_label, sub_id, start_time, end_time) in enumerate(speaker_info):
+            if i < len(context_translations):
+                enhanced_text = context_translations[i]
+                
+                # Apply English-specific enhancements
+                enhanced_text = apply_english_enhancements(enhanced_text, speaker_label)
+                
+                # Add speaker label back
+                final_text = f"{speaker_label} {enhanced_text}" if speaker_label else enhanced_text
+                
+                # Update conversation context
+                conversation_context.append(enhanced_text)
+                if len(conversation_context) > 5:  # Keep last 5 for context
+                    conversation_context.pop(0)
+                
+                # Build SRT entry
+                start_timestamp = format_timestamp(start_time)
+                end_timestamp = format_timestamp(end_time)
+                
+                translated_srt += f"{sub_id}\n"
+                translated_srt += f"{start_timestamp} --> {end_timestamp}\n"
+                translated_srt += f"{final_text}\n\n"
+    
+    return translated_srt
+
+def group_by_conversation_segments(subtitles: List[Dict], max_gap: float = 3.0) -> List[List[Dict]]:
+    """Group subtitles into conversation segments based on time gaps"""
+    if not subtitles:
+        return []
+    
+    segments = []
+    current_segment = [subtitles[0]]
+    
+    for i in range(1, len(subtitles)):
+        time_gap = subtitles[i]['start'] - subtitles[i-1]['end']
+        
+        # Start new segment if gap is too large or speaker changes significantly
+        if time_gap > max_gap:
+            segments.append(current_segment)
+            current_segment = [subtitles[i]]
+        else:
+            current_segment.append(subtitles[i])
+    
+    segments.append(current_segment)
+    return segments
+
+def extract_individual_translations(context_translation: str, expected_count: int) -> List[str]:
+    """Extract individual translations from context-aware translation"""
+    # Split by common separators
+    separators = [' | ', ' |', '| ', '|', '. ', '; ', '\n']
+    
+    for sep in separators:
+        if sep in context_translation:
+            parts = context_translation.split(sep)
+            if len(parts) == expected_count:
+                return [part.strip() for part in parts]
+    
+    # Fallback: split by sentences
+    sentences = context_translation.split('. ')
+    if len(sentences) >= expected_count:
+        return sentences[:expected_count]
+    
+    # Last resort: return the whole translation for first item
+    return [context_translation] + [""] * (expected_count - 1)
+
+def enhance_single_translation(text: str, context: List[str], translator: SubtitleTranslator, api_key: str = None) -> str:
+    """Enhance single line translation with conversation context"""
+    if not context:
+        return translator.translate_subtitle_text(text, "en", api_key)
+    
+    # Create context-aware prompt
+    recent_context = " ".join(context[-3:])  # Last 3 lines of context
+    context_prompt = f"Given this conversation context: '{recent_context}', translate this naturally to English: '{text}'"
+    
+    try:
+        enhanced = translator.translate_subtitle_text(context_prompt, "en", api_key)
+        # Extract just the translation part (remove context explanation)
+        if "translate" in enhanced.lower() and ":" in enhanced:
+            enhanced = enhanced.split(":")[-1].strip()
+        return enhanced
+    except Exception as e:
+        return translator.translate_subtitle_text(text, "en", api_key)
+
+def apply_english_enhancements(text: str, speaker_label: str = "") -> str:
+    """Apply English-specific enhancements for natural conversation"""
+    if not text:
+        return text
+    
+    # Remove translation artifacts
+    text = text.replace("Translate this", "").replace("translate this", "")
+    text = text.replace("Translation:", "").replace("translation:", "")
+    
+    # Fix common translation issues
+    enhancements = {
+        # Casual conversation improvements
+        " uh ": " um ",
+        " yeah ": " yes ",
+        " gonna ": " going to ",
+        " wanna ": " want to ",
+        " gotta ": " have to ",
+        
+        # Formal improvements
+        " i ": " I ",
+        " i'm ": " I'm ",
+        " i'll ": " I'll ",
+        " i've ": " I've ",
+        " i'd ": " I'd ",
+        
+        # Common grammar fixes
+        " a apple": " an apple",
+        " a orange": " an orange",
+        " a hour": " an hour",
+        " a university": " a university",
+        
+        # Speech patterns
+        "very very ": "really ",
+        "more better": "better",
+        "most best": "best",
+    }
+    
+    # Apply enhancements
+    enhanced_text = text
+    for old, new in enhancements.items():
+        enhanced_text = enhanced_text.replace(old, new)
+    
+    # Capitalize first letter
+    if enhanced_text:
+        enhanced_text = enhanced_text[0].upper() + enhanced_text[1:] if len(enhanced_text) > 1 else enhanced_text.upper()
+    
+    # Ensure proper ending punctuation for dialogue
+    if enhanced_text and not enhanced_text.endswith(('.', '!', '?', ':')):
+        enhanced_text += "."
+    
+    return enhanced_text.strip()
 
 class ElevenLabsSubtitleGenerator:
     def __init__(self, api_key: str):
@@ -989,7 +1277,7 @@ def main():
             target_languages = st.multiselect(
                 "Target Languages",
                 options=list(TARGET_LANGUAGES.keys()),
-                default=["Spanish", "French"],
+                default=["English", "Spanish", "French"],
                 help="Select languages to translate subtitles to. Speaker labels and timestamps will be preserved."
             )
             
