@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { FileVideo, FileAudio, LogIn } from 'lucide-react';
+import { FileVideo, FileAudio, LogIn, LayoutDashboard } from 'lucide-react';
 import FileUpload from './FileUpload';
 import ConfigurationPanel from './ConfigurationPanel';
 import TranscriptionDisplay from './TranscriptionDisplay';
@@ -10,7 +10,11 @@ import UserMenu from './UserMenu';
 import { useAuth } from '../contexts/AuthContext';
 import { TranscriptionData, TranslationData, ApiResponse } from '../types';
 
-const SubtitleGenerator: React.FC = () => {
+interface SubtitleGeneratorProps {
+  onNavigateToDashboard?: () => void;
+}
+
+const SubtitleGenerator: React.FC<SubtitleGeneratorProps> = ({ onNavigateToDashboard }) => {
   const [currentStep, setCurrentStep] = useState<'upload' | 'configure' | 'processing' | 'results'>('upload');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [mediaUrl, setMediaUrl] = useState<string>('');
@@ -68,6 +72,17 @@ const SubtitleGenerator: React.FC = () => {
       formData.append('num_speakers', configuration.numSpeakers.toString());
       formData.append('diarize', configuration.diarize.toString());
       formData.append('tag_audio_events', configuration.tagAudioEvents.toString());
+      
+      // Add user_id and access_token if user is authenticated
+      if (user?.id) {
+        formData.append('user_id', user.id);
+        
+        // Get the access token from Supabase session
+        const { data: { session } } = await (await import('../lib/supabase')).supabase.auth.getSession();
+        if (session?.access_token) {
+          formData.append('access_token', session.access_token);
+        }
+      }
 
       setProcessingStep('Creating transcription...');
       
@@ -94,6 +109,16 @@ const SubtitleGenerator: React.FC = () => {
         if (configuration.translationApiKey) {
           translationFormData.append('api_key', configuration.translationApiKey);
         }
+        // Add user_id and access_token if user is authenticated
+        if (user?.id) {
+          translationFormData.append('user_id', user.id);
+          
+          // Get the access token from Supabase session
+          const { data: { session } } = await (await import('../lib/supabase')).supabase.auth.getSession();
+          if (session?.access_token) {
+            translationFormData.append('access_token', session.access_token);
+          }
+        }
 
         const translationResponse = await fetch('http://localhost:8001/api/translate', {
           method: 'POST',
@@ -109,12 +134,14 @@ const SubtitleGenerator: React.FC = () => {
       setCurrentStep('results');
     } catch (error) {
       console.error('Processing error:', error);
-      alert('Processing failed. Please check the backend configuration and try again.');
+      // Show more detailed error message
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Processing failed: ${errorMessage}\n\nPlease check the backend configuration and console for details.`);
     } finally {
       setIsProcessing(false);
       setProcessingStep('');
     }
-  }, [uploadedFile, configuration]);
+  }, [uploadedFile, configuration, user]);
 
   const downloadSubtitle = useCallback(async (format: string, language: string = 'original') => {
     if (!transcriptionData?.session_id) return;
@@ -166,7 +193,18 @@ const SubtitleGenerator: React.FC = () => {
             {/* Auth Section */}
             <div className="flex items-center space-x-4">
               {user ? (
-                <UserMenu />
+                <div className="flex items-center space-x-4">
+                  {onNavigateToDashboard && (
+                    <button
+                      onClick={onNavigateToDashboard}
+                      className="flex items-center space-x-2 px-4 py-2 text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors"
+                    >
+                      <LayoutDashboard className="w-5 h-5" />
+                      <span className="font-medium">Dashboard</span>
+                    </button>
+                  )}
+                  <UserMenu />
+                </div>
               ) : (
                 <button
                   onClick={() => setIsAuthModalOpen(true)}

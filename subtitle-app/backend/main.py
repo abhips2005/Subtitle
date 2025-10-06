@@ -11,13 +11,19 @@ import uuid
 from pathlib import Path
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
+from supabase import create_client, Client
 
 # Load environment variables
 load_dotenv()
+
+# Initialize Supabase
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://yamrdbzujegsnxcznyio.supabase.co")
+SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlhbXJkYnp1amVnc254Y3pueWlvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NjMwNjYsImV4cCI6MjA3NTIzOTA2Nn0.SyL9_Uz1WiAGSA0XtYJGsILj6iLwUUeHv3S5cnlUBV0")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Import our existing classes
 import sys
@@ -67,6 +73,49 @@ class APIResponse(BaseModel):
 # Global storage for session data
 sessions = {}
 
+def save_to_supabase(session_id: str, user_id: str, session_data: dict, access_token: Optional[str] = None):
+    """Save subtitle generation to Supabase"""
+    try:
+        # Extract relevant data
+        transcription = session_data.get('transcription', {})
+        
+        data = {
+            'user_id': user_id,
+            'session_id': session_id,
+            'filename': session_data.get('filename', 'unknown'),
+            'file_type': 'video' if 'video' in session_data.get('filename', '').lower() else 'audio',
+            'duration': transcription.get('words', [{}])[-1].get('end', 0) if transcription.get('words') else 0,
+            'language': transcription.get('language_code', 'Unknown'),
+            'language_confidence': transcription.get('language_probability', 0),
+            'speakers_detected': len(set(word.get('speaker_id') for word in transcription.get('words', []) if word.get('speaker_id'))),
+            'has_translation': 'translated_subtitles' in session_data and len(session_data.get('translated_subtitles', {})) > 0,
+            'translation_languages': list(session_data.get('translated_subtitles', {}).keys()),
+            'srt_content': session_data.get('srt_content', ''),
+            'vtt_content': session_data.get('vtt_content', ''),
+            'translated_subtitles': session_data.get('translated_subtitles', {}),
+            'translated_vtt': session_data.get('translated_vtt', {}),
+            'transcription_data': transcription
+        }
+        
+        # Create authenticated Supabase client if access token provided
+        if access_token:
+            # Create a new client and set the auth token in headers
+            auth_supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+            # Set authorization header for the request
+            auth_supabase.postgrest.auth(token=access_token)
+            result = auth_supabase.table('subtitle_generations').upsert(data, on_conflict='session_id').execute()
+        else:
+            # Use default client (may fail RLS if not authenticated)
+            result = supabase.table('subtitle_generations').upsert(data, on_conflict='session_id').execute()
+        
+        print(f"Successfully saved to Supabase: session_id={session_id}")
+        return result
+    except Exception as e:
+        print(f"Error saving to Supabase: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 @app.get("/")
 async def root():
     return {"message": "Subtitle Generator API is running"}
@@ -113,7 +162,9 @@ async def create_transcription(
     language_code: Optional[str] = Form(None),
     num_speakers: Optional[int] = Form(None),
     diarize: bool = Form(True),
-    tag_audio_events: bool = Form(True)
+    tag_audio_events: bool = Form(True),
+    user_id: Optional[str] = Form(None),
+    access_token: Optional[str] = Form(None)
 ):
     """Create transcription from uploaded audio/video file"""
     try:
@@ -161,6 +212,10 @@ async def create_transcription(
             'filename': file.filename
         }
         
+        # Save to Supabase if user is authenticated
+        if user_id and access_token:
+            save_to_supabase(session_id, user_id, sessions[session_id], access_token)
+        
         # Calculate statistics
         speakers = set()
         if 'words' in transcription:
@@ -188,6 +243,9 @@ async def create_transcription(
         )
         
     except Exception as e:
+        print(f"Transcription error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/translate")
@@ -195,7 +253,9 @@ async def translate_subtitles(
     session_id: str = Form(...),
     target_languages: str = Form(...),  # JSON string of list
     translation_service: str = Form("google_free"),
-    api_key: Optional[str] = Form(None)
+    api_key: Optional[str] = Form(None),
+    user_id: Optional[str] = Form(None),
+    access_token: Optional[str] = Form(None)
 ):
     """Translate subtitles to multiple languages"""
     try:
@@ -249,6 +309,10 @@ async def translate_subtitles(
         sessions[session_id]['translated_subtitles'] = translated_subtitles
         sessions[session_id]['translated_vtt'] = translated_vtt
         
+        # Update in Supabase if user is authenticated
+        if user_id and access_token:
+            save_to_supabase(session_id, user_id, sessions[session_id], access_token)
+        
         return APIResponse(
             success=True,
             message=f"Translation completed for {len(translated_subtitles)} languages",
@@ -261,6 +325,9 @@ async def translate_subtitles(
         )
         
     except Exception as e:
+        print(f"Translation error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/session/{session_id}")
