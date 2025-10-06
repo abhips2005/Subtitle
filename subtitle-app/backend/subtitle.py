@@ -15,6 +15,7 @@ BASE_URL = "https://api.elevenlabs.io"
 # Translation Services Configuration
 TRANSLATION_SERVICES = {
     "Google Translate (Free)": "google_free",
+    "Google Gemini AI": "gemini",
     "LibreTranslate (Free)": "libre",
     "Azure Translator": "azure"
 }
@@ -137,6 +138,61 @@ class SubtitleTranslator:
             st.warning(f"LibreTranslate failed: {str(e)}, falling back to Google Translate")
             return self.translate_text_google_free(text, target_lang, source_lang)
     
+    def translate_text_gemini(self, text: str, target_lang: str, api_key: str) -> str:
+        """Translate text using Google Gemini AI"""
+        try:
+            import google.generativeai as genai
+            
+            # Configure Gemini
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-pro')
+            
+            # Map language codes to full language names for better Gemini understanding
+            lang_names = {
+                "es": "Spanish", "fr": "French", "de": "German", "it": "Italian",
+                "pt": "Portuguese", "ru": "Russian", "ja": "Japanese", "zh": "Chinese",
+                "ko": "Korean", "hi": "Hindi", "ar": "Arabic", "nl": "Dutch",
+                "tr": "Turkish", "pl": "Polish", "sv": "Swedish", "no": "Norwegian",
+                "da": "Danish", "fi": "Finnish", "cs": "Czech", "hu": "Hungarian",
+                "bg": "Bulgarian", "ro": "Romanian", "el": "Greek", "he": "Hebrew",
+                "th": "Thai", "vi": "Vietnamese", "id": "Indonesian", "ms": "Malay",
+                "tl": "Filipino", "uk": "Ukrainian", "bn": "Bengali", "ta": "Tamil",
+                "te": "Telugu", "mr": "Marathi", "gu": "Gujarati", "kn": "Kannada",
+                "ml": "Malayalam", "pa": "Punjabi", "ur": "Urdu", "fa": "Persian",
+                "sw": "Swahili", "af": "Afrikaans", "ca": "Catalan", "hr": "Croatian"
+            }
+            
+            target_language_name = lang_names.get(target_lang, target_lang)
+            
+            # Create a focused translation prompt
+            prompt = f"""Translate the following text to {target_language_name}. 
+            
+IMPORTANT RULES:
+- Only provide the translation, no explanations or additional text
+- Preserve any speaker labels like [Speaker 1], [Speaker 2], etc.
+- Preserve timestamps and formatting markers
+- Keep the same tone and style as the original
+- If there are audio event tags like [LAUGHTER], [APPLAUSE], translate them appropriately
+
+Text to translate:
+{text}
+
+Translation:"""
+            
+            response = model.generate_content(prompt)
+            translation = response.text.strip()
+            
+            # Clean up any markdown formatting that Gemini might add
+            if translation.startswith('```') and translation.endswith('```'):
+                lines = translation.split('\n')
+                translation = '\n'.join(lines[1:-1])
+            
+            return translation
+            
+        except Exception as e:
+            st.warning(f"Gemini translation failed: {str(e)}")
+            return text
+    
     def translate_text_azure(self, text: str, target_lang: str, api_key: str, region: str = "global") -> str:
         """Translate text using Azure Translator API"""
         try:
@@ -173,6 +229,8 @@ class SubtitleTranslator:
         try:
             if self.service == "google_free":
                 return self.translate_text_google_free(text, target_lang)
+            elif self.service == "gemini" and api_key:
+                return self.translate_text_gemini(text, target_lang, api_key)
             elif self.service == "libre":
                 return self.translate_text_libre(text, target_lang)
             elif self.service == "azure" and api_key:

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Key, Globe, CheckCircle, AlertCircle } from 'lucide-react';
+import { Settings, Globe, CheckCircle, AlertCircle } from 'lucide-react';
 import { Configuration } from '../types';
 
 interface ConfigurationPanelProps {
@@ -42,27 +42,6 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ configuration, 
       <div className="flex items-center space-x-2">
         <Settings className="w-6 h-6 text-gray-600" />
         <h2 className="text-xl font-semibold text-gray-900">Configuration</h2>
-      </div>
-
-      {/* API Key */}
-      <div className="bg-white rounded-lg shadow p-6 space-y-4">
-        <div className="flex items-center space-x-2">
-          <Key className="w-5 h-5 text-blue-600" />
-          <h3 className="font-medium text-gray-900">ElevenLabs API Key</h3>
-        </div>
-        
-        <div>
-          <input
-            type="password"
-            value={configuration.apiKey}
-            onChange={(e) => updateConfiguration({ apiKey: e.target.value })}
-            placeholder="Enter your ElevenLabs API key"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Get your API key from <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">ElevenLabs</a>
-          </p>
-        </div>
       </div>
 
       {/* Transcription Settings */}
@@ -169,12 +148,16 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ configuration, 
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="google_free">🟢 Google Translate (Free)</option>
+                <option value="gemini">🤖 Google Gemini AI (API Key Required)</option>
                 <option value="libre">🟡 LibreTranslate (Free)</option>
                 <option value="azure">🔑 Azure Translator (API Key Required)</option>
               </select>
               <div className="text-xs text-gray-500 mt-1">
                 {configuration.translationService === 'google_free' && (
                   <p>🔄 Good quality, may have rate limits</p>
+                )}
+                {configuration.translationService === 'gemini' && (
+                  <p>🤖 AI-powered translation with context awareness</p>
                 )}
                 {configuration.translationService === 'libre' && (
                   <p>🌐 Open source, may be slower</p>
@@ -184,6 +167,25 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ configuration, 
                 )}
               </div>
             </div>
+
+            {/* Gemini API Key */}
+            {configuration.translationService === 'gemini' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Google Gemini API Key
+                </label>
+                <input
+                  type="password"
+                  value={configuration.translationApiKey}
+                  onChange={(e) => updateConfiguration({ translationApiKey: e.target.value })}
+                  placeholder="Enter your Google Gemini API key"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Get your API key from <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Google AI Studio</a>
+                </p>
+              </div>
+            )}
 
             {/* Azure API Key */}
             {configuration.translationService === 'azure' && (
@@ -250,18 +252,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ configuration, 
       <div className="bg-gray-50 rounded-lg p-4">
         <h4 className="font-medium text-gray-900 mb-2">Ready to Process?</h4>
         <div className="space-y-2">
-          <div className="flex items-center space-x-2">
-            {configuration.apiKey ? (
-              <CheckCircle className="w-4 h-4 text-green-600" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-red-600" />
-            )}
-            <span className={`text-sm ${configuration.apiKey ? 'text-green-700' : 'text-red-700'}`}>
-              ElevenLabs API Key
-            </span>
-          </div>
-          
-          {configuration.enableTranslation && configuration.translationService === 'azure' && (
+          {configuration.enableTranslation && (configuration.translationService === 'azure' || configuration.translationService === 'gemini') && (
             <div className="flex items-center space-x-2">
               {configuration.translationApiKey ? (
                 <CheckCircle className="w-4 h-4 text-green-600" />
@@ -269,7 +260,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ configuration, 
                 <AlertCircle className="w-4 h-4 text-red-600" />
               )}
               <span className={`text-sm ${configuration.translationApiKey ? 'text-green-700' : 'text-red-700'}`}>
-                Azure Translation API Key
+                {configuration.translationService === 'gemini' ? 'Google Gemini' : 'Azure Translation'} API Key
               </span>
             </div>
           )}

@@ -23,7 +23,6 @@ export interface ApiResponse {
 }
 
 export interface Configuration {
-  apiKey: string;
   language: string;
   numSpeakers: number;
   diarize: boolean;

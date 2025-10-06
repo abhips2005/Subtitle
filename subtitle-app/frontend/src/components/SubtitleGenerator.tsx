@@ -1,18 +1,22 @@
 import React, { useState, useCallback } from 'react';
-import { Upload, Settings, Globe, Download, Play, Pause, FileAudio, FileVideo } from 'lucide-react';
+import { FileVideo, FileAudio, LogIn } from 'lucide-react';
 import FileUpload from './FileUpload';
 import ConfigurationPanel from './ConfigurationPanel';
 import TranscriptionDisplay from './TranscriptionDisplay';
 import TranslationPanel from './TranslationPanel';
 import VideoPlayer from './VideoPlayer';
+import AuthModal from './AuthModal';
+import UserMenu from './UserMenu';
+import { useAuth } from '../contexts/AuthContext';
 import { TranscriptionData, TranslationData, ApiResponse } from '../types';
 
 const SubtitleGenerator: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<'upload' | 'configure' | 'processing' | 'results'>('upload');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [mediaUrl, setMediaUrl] = useState<string>('');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const { user } = useAuth();
   const [configuration, setConfiguration] = useState({
-    apiKey: '',
     language: 'Auto-detect',
     numSpeakers: 1,
     diarize: true,
@@ -50,7 +54,7 @@ const SubtitleGenerator: React.FC = () => {
   }, []);
 
   const handleStartProcessing = useCallback(async () => {
-    if (!uploadedFile || !configuration.apiKey) return;
+    if (!uploadedFile) return;
 
     setIsProcessing(true);
     setCurrentStep('processing');
@@ -60,7 +64,6 @@ const SubtitleGenerator: React.FC = () => {
       // Create transcription
       const formData = new FormData();
       formData.append('file', uploadedFile);
-      formData.append('api_key', configuration.apiKey);
       formData.append('language_code', configuration.language === 'Auto-detect' ? '' : configuration.language);
       formData.append('num_speakers', configuration.numSpeakers.toString());
       formData.append('diarize', configuration.diarize.toString());
@@ -106,7 +109,7 @@ const SubtitleGenerator: React.FC = () => {
       setCurrentStep('results');
     } catch (error) {
       console.error('Processing error:', error);
-      alert('Processing failed. Please check your API key and try again.');
+      alert('Processing failed. Please check the backend configuration and try again.');
     } finally {
       setIsProcessing(false);
       setProcessingStep('');
@@ -160,28 +163,26 @@ const SubtitleGenerator: React.FC = () => {
               </div>
             </div>
             
-            {/* Progress indicator */}
+            {/* Auth Section */}
             <div className="flex items-center space-x-4">
-              <div className={`flex items-center space-x-2 ${currentStep === 'upload' ? 'text-blue-600' : 'text-green-600'}`}>
-                <Upload className="w-5 h-5" />
-                <span className="text-sm font-medium">Upload</span>
-              </div>
-              <div className={`flex items-center space-x-2 ${currentStep === 'configure' ? 'text-blue-600' : ['processing', 'results'].includes(currentStep) ? 'text-green-600' : 'text-gray-400'}`}>
-                <Settings className="w-5 h-5" />
-                <span className="text-sm font-medium">Configure</span>
-              </div>
-              <div className={`flex items-center space-x-2 ${currentStep === 'processing' ? 'text-blue-600' : currentStep === 'results' ? 'text-green-600' : 'text-gray-400'}`}>
-                <Globe className="w-5 h-5" />
-                <span className="text-sm font-medium">Process</span>
-              </div>
-              <div className={`flex items-center space-x-2 ${currentStep === 'results' ? 'text-blue-600' : 'text-gray-400'}`}>
-                <Download className="w-5 h-5" />
-                <span className="text-sm font-medium">Results</span>
-              </div>
+              {user ? (
+                <UserMenu />
+              ) : (
+                <button
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  <LogIn className="w-5 h-5" />
+                  <span className="font-medium">Sign In</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
       </header>
+
+      {/* Auth Modal */}
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -237,8 +238,7 @@ const SubtitleGenerator: React.FC = () => {
                 </button>
                 <button
                   onClick={handleStartProcessing}
-                  disabled={!configuration.apiKey}
-                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
                 >
                   Generate Subtitles
                 </button>

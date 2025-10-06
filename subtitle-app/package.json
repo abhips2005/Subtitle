@@ -10,10 +10,17 @@
     "build": "cd frontend && npm run build"
   },
   "dependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "supabase": "^2.48.3"
   },
-  "devDependencies": {},
-  "keywords": ["subtitle", "transcription", "translation", "elevenlabs", "react", "fastapi"],
+  "keywords": [
+    "subtitle",
+    "transcription",
+    "translation",
+    "elevenlabs",
+    "react",
+    "fastapi"
+  ],
   "author": "",
   "license": "ISC"
 }

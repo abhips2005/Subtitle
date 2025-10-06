@@ -4,14 +4,33 @@ A modern React frontend for the ElevenLabs-powered subtitle generator with multi
 
 ## 🚀 Features
 
+### Core Features
 - **Modern React UI** - Clean, responsive interface built with React, TypeScript, and Tailwind CSS
 - **Drag & Drop File Upload** - Easy file upload with support for audio and video files
 - **Real-time Processing** - Visual feedback during transcription and translation
-- **Multi-language Support** - Translate subtitles to 40+ languages while preserving all features
 - **Integrated Video Player** - Custom video player with synchronized subtitle display
 - **Multiple Export Formats** - Download subtitles in SRT, VTT, and JSON formats
 - **Speaker Diarization** - Visual display of speaker identification
 - **Timeline View** - Interactive timeline showing subtitle timing
+
+### Translation Services
+- 🟢 **Google Translate (Free)** - Fast, reliable translation without API key
+- 🤖 **Google Gemini AI** - AI-powered context-aware translation (NEW!)
+- 🟡 **LibreTranslate (Free)** - Open-source translation service
+- 🔑 **Azure Translator** - Premium Microsoft translation service
+
+### Multi-language Support
+- Translate subtitles to **40+ languages**
+- Preserves speaker diarization
+- Maintains timestamps and formatting
+- Keeps audio event tags (laughter, applause, etc.)
+
+### Gemini AI Translation ⭐ NEW
+- Context-aware AI translation using Google's Gemini Pro
+- Better understanding of idioms and cultural nuances
+- More natural-sounding translations
+- Smart formatting preservation
+- See [GEMINI_TRANSLATION_GUIDE.md](GEMINI_TRANSLATION_GUIDE.md) for details
 
 ## 🛠 Technology Stack
 

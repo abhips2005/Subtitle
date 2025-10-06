@@ -9,11 +9,15 @@ import json
 import asyncio
 import uuid
 from pathlib import Path
+from dotenv import load_dotenv
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
+
+# Load environment variables
+load_dotenv()
 
 # Import our existing classes
 import sys
@@ -105,7 +109,7 @@ async def get_languages():
 @app.post("/api/transcribe")
 async def create_transcription(
     file: UploadFile = File(...),
-    api_key: str = Form(...),
+    api_key: Optional[str] = Form(None),
     language_code: Optional[str] = Form(None),
     num_speakers: Optional[int] = Form(None),
     diarize: bool = Form(True),
@@ -113,8 +117,11 @@ async def create_transcription(
 ):
     """Create transcription from uploaded audio/video file"""
     try:
-        if not api_key or api_key == "your_api_key_here":
-            raise HTTPException(status_code=400, detail="Valid ElevenLabs API key required")
+        # Get API key from environment variable or form data
+        elevenlabs_api_key = api_key or os.getenv("ELEVENLABS_API_KEY")
+        
+        if not elevenlabs_api_key or elevenlabs_api_key == "your_api_key_here":
+            raise HTTPException(status_code=400, detail="Valid ElevenLabs API key required. Please set ELEVENLABS_API_KEY in .env file")
         
         # Create session ID
         session_id = str(uuid.uuid4())
@@ -131,7 +138,7 @@ async def create_transcription(
                 pass
         
         # Initialize generator
-        generator = ElevenLabsSubtitleGenerator(api_key)
+        generator = ElevenLabsSubtitleGenerator(elevenlabs_api_key)
         
         # Create transcription
         transcription = generator.create_transcription(
@@ -197,6 +204,12 @@ async def translate_subtitles(
         
         # Parse target languages from JSON string
         target_languages_list = json.loads(target_languages)
+        
+        # Get API key from environment if not provided and service requires it
+        if translation_service == "gemini" and not api_key:
+            api_key = os.getenv("GEMINI_API_KEY")
+            if not api_key or api_key == "your_gemini_api_key_here":
+                raise HTTPException(status_code=400, detail="Gemini API key required. Please set GEMINI_API_KEY in .env file or provide it in the request")
         
         session_data = sessions[session_id]
         srt_content = session_data['srt_content']
